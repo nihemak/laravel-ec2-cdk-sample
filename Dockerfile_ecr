@@ -1,0 +1,6 @@
+FROM amazonlinux:2.0.20181114
+
+RUN amazon-linux-extras install php7.3 -y
+RUN yum install -y php-mbstring php-xml php-bcmath
+RUN curl -sS https://getcomposer.org/installer | php && cp composer.phar /usr/local/bin/composer && ln -s /usr/local/bin/composer /usr/bin/composer
+RUN yum install -y git zip unzip tar

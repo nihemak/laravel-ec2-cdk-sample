@@ -1,0 +1,179 @@
+---
+- hosts: 127.0.0.1
+  connection: local
+  become: yes
+  tasks:
+    - name: Set timezone to Asia/Tokyo
+      timezone:
+        name: Asia/Tokyo
+    - name: Restart service crond (enable timezone)
+      service:
+        name: crond
+        state: restarted
+    #- name: Enable to install nginx/php
+    #  shell: "amazon-linux-extras enable {{ item }}"
+    #  with_items:
+    #    - nginx1.12
+    #    - php7.3
+    #- name: Install the latest version of yum packages
+    #  yum:
+    #    name: "{{ item }}"
+    #  with_items:
+    #    - python2-pip
+    #    - nginx
+    #    - php
+    #    - php-fpm
+    #    - php-mbstring
+    #    - php-xml
+    #    - php-bcmath
+    - name: Check composer
+      stat:
+        path: /usr/local/bin/composer
+      register: composer_bin
+    - block:
+      - name: Download composer
+        get_url:
+          url: https://getcomposer.org/installer
+          dest: /tmp/installer
+      - name: Install composer
+        shell: cat /tmp/installer | php -- --install-dir=/usr/local/bin
+      - name: Rename composer.phar to composer
+        shell: mv /usr/local/bin/composer.phar /usr/local/bin/composer
+      - name: Make composer executable
+        file:
+          path: /usr/local/bin/composer
+          mode: a+x
+          state: file
+      when: not composer_bin.stat.exists
+    - name: Change php-fpm user to nginx
+      lineinfile:
+        dest: /etc/php-fpm.d/www.conf
+        regexp: "^user = "
+        insertafter: "^; RPM: apache user"
+        line: "user = nginx"
+    - name: Change php-fpm group to nginx
+      lineinfile:
+        dest: /etc/php-fpm.d/www.conf
+        regexp: "^group = "
+        insertafter: "^; RPM: Keep a group"
+        line: "group = nginx"
+    - name: Change php timezone to Asia/Tokyo
+      lineinfile:
+        dest: /etc/php.ini
+        insertafter: "^;date.timezone ="
+        line: "date.timezone = Asia/Tokyo"
+    - name: Change php expose_php to Off
+      lineinfile:
+        dest: /etc/php.ini
+        regexp: "^expose_php = "
+        insertafter: "^; http://php.net/expose-php"
+        line: "expose_php = Off"
+    - name: Change php memory_limit to 256M
+      lineinfile:
+        dest: /etc/php.ini
+        regexp: "^memory_limit = "
+        insertafter: "^; http://php.net/memory-limit"
+        line: "memory_limit = 256M"
+    - name: Set php error_log
+      lineinfile:
+        dest: /etc/php.ini
+        insertafter: "^;error_log = syslog"
+        line: "error_log = /var/log/php_errors.log"
+    - name: Create php_errors.log
+      file:
+        path: /var/log/php_errors.log
+        state: touch
+        mode: 0777
+    - name: Create test-laravel dir
+      file:
+        path: "/usr/share/nginx/html/test-laravel{{ item }}"
+        state: directory
+        owner: nginx
+        group: nginx
+        mode: 0755
+      with_items:
+        - ""
+        - /releases
+        - /shared
+    - name: Create test-laravel/shared sub dirs
+      file:
+        path: "/usr/share/nginx/html/test-laravel/shared/{{ item }}"
+        state: directory
+        owner: nginx
+        group: root
+        mode: 0777
+      with_items:
+        - storage
+        - storage/app
+        - storage/app/public
+        - storage/framework
+        - storage/framework/cache
+        - storage/framework/cache/data
+        - storage/framework/sessions
+        - storage/framework/testing
+        - storage/framework/views
+        - storage/logs
+    # create ssl
+    - name: Install pyopenssl python package
+      pip:
+        name: pyopenssl
+    - name: Create directories for OpenSSL certificate
+      file:
+        path: "/etc/ssl/{{ item }}"
+        state: directory
+        owner: root
+        group: root
+        mode: 0755
+      with_items:
+        - private
+        - crt
+        - csr
+    - name: Generate an OpenSSL private key with the default values (4096 bits, RSA)
+      openssl_privatekey:
+        path: /etc/ssl/private/server.pem
+    - name: Generate OpenSSL CSR
+      openssl_csr:
+        path: /etc/ssl/csr/server.csr
+        privatekey_path: /etc/ssl/private/server.pem
+        common_name: test-laravel
+    - name: Generate OpenSSL certificate
+      openssl_certificate:
+        path: /etc/ssl/crt/server.crt
+        privatekey_path: /etc/ssl/private/server.pem
+        csr_path: /etc/ssl/csr/server.csr
+        provider: selfsigned
+    - name: Change nginx.conf
+      template:
+        src: templates/nginx.conf.j2
+        dest: /etc/nginx/nginx.conf
+    - name: Change .env
+      template:
+        src: templates/laravel.env.j2
+        dest: /usr/share/nginx/html/test-laravel/.env
+        owner: nginx
+        group: nginx
+    #- name: Restart php-fpm
+    #  service:
+    #    name: php-fpm
+    #    state: restarted
+    #- name: Restart nginx
+    #  service:
+    #    name: nginx
+    #    state: restarted
+    ## install CodeDeploy agent
+    #- name: Install the latest version of yum packages
+    #  yum:
+    #    name: "{{ item }}"
+    #  with_items:
+    #    - ruby
+    #- name: Get CodeDeploy agent installer from s3
+    #  get_url:
+    #    url: https://aws-codedeploy-ap-northeast-1.s3.amazonaws.com/latest/install
+    #    dest: /tmp/codedeploy-install
+    #- name: Change CodeDeploy agent permission installer
+    #  file:
+    #    state: file
+    #    path: /tmp/codedeploy-install
+    #    mode: 0755
+    #- name: Install CodeDeploy agent
+    #  command: /tmp/codedeploy-install auto

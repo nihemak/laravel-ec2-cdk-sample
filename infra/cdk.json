@@ -1,0 +1,3 @@
+{
+  "app": "npx ts-node bin/laravel-ec2-cdk-sample.ts"
+}

@@ -1,0 +1,28 @@
+version: 0.2
+
+phases:
+  build:
+    commands:
+      - cd laravel
+      - |
+          if [ -e /tmp/composer.lock ] && [ -e /tmp/vendor.tar ]; then
+            diff /tmp/composer.lock ./composer.lock
+            if [ $? -eq 0 ]; then
+              tar xf /tmp/vendor.tar
+            fi
+          fi
+          if [ ! -e ./vendor ]; then
+            rm -rf .git .gitignore README.md
+            composer install --verbose --prefer-dist --no-progress --no-interaction --no-dev --optimize-autoloader
+          fi
+  post_build:
+    commands:
+      - cp composer.lock /tmp
+      - tar cf /tmp/vendor.tar vendor
+artifacts:
+  files:
+    - '**/*'
+cache:
+  paths:
+    - /tmp/composer.lock
+    - /tmp/vendor.tar

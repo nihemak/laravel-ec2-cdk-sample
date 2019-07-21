@@ -1,0 +1,14 @@
+version: 0.0
+os: linux
+files:
+  - source: ./
+    destination: /tmp/test_laravel
+permissions:
+  - object: /tmp/test_laravel
+    pattern: "**"
+    owner: nginx
+hooks:
+  AfterInstall:
+    - location: aws_deploy.sh
+      timeout: 300
+      runas: root
